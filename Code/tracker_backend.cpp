@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <cmath>
 #include <algorithm>
+#include <limits>
 
 namespace {
 
@@ -37,6 +38,7 @@ namespace {
 
     double stereoSoftScore(const DetectionResult& L, const DetectionResult& R, int W, int H) {
         if (!stereoUsable(L, R)) return -1e12;
+
         const double du = L.center.x - R.center.x;
         const double dv = L.center.y - R.center.y;
 
@@ -52,7 +54,11 @@ namespace {
         const double rR = std::max(R.radius_px, 1.0);
         const double penR = std::abs(rL - rR) / std::max(rL, rR);
 
-        return 2.0 * std::min(mL, mR) + std::log1p(std::abs(du)) + 22.0 * (1.0 - std::min(1.0, penR)) - 3.0 * penB - penV;
+        return 2.0 * std::min(mL, mR)
+            + std::log1p(std::abs(du))
+            + 22.0 * (1.0 - std::min(1.0, penR))
+            - 3.0 * penB
+            - penV;
     }
 
     void appendLine(std::ostringstream& oss, const std::string& line) {
@@ -64,25 +70,93 @@ namespace {
         return cv::Point2d(p.x + x0, p.y + y0);
     }
 
-    cv::Point3d cameraToWorldApprox(double Xcam, double YimgDown, double Zcam,
-        double rigX, double rigY, double rigZ,
-        double pitchDeg) {
-        // Convert image-style camera coords (x right, y down, z forward)
-        // to an approximate Blender/world frame where:
-        //   world X = right, world Y = down-court forward, world Z = up.
-        // Local unpitched mapping: [x, z, -y]
-        const double px = Xcam;
-        const double py = Zcam;
-        const double pz = -YimgDown;
+    cv::Matx33d makeK(double fx_px, double fy_px, double cx, double cy)
+    {
+        return cv::Matx33d(
+            fx_px, 0.0, cx,
+            0.0, fy_px, cy,
+            0.0, 0.0, 1.0
+        );
+    }
 
-        const double a = -pitchDeg * CV_PI / 180.0;
-        const double ca = std::cos(a);
-        const double sa = std::sin(a);
+    cv::Matx34d makeProjectionFromBlender(
+        const cv::Matx33d& K,
+        const cv::Matx33d& R_cw_bl,
+        const cv::Vec3d& C_world)
+    {
+        // Blender camera coords -> OpenCV camera coords
+        // Blender: +X right, +Y up, camera looks along -Z
+        // OpenCV:  +X right, +Y down, +Z forward
+        const cv::Matx33d S(
+            1.0, 0.0, 0.0,
+            0.0, -1.0, 0.0,
+            0.0, 0.0, -1.0
+        );
 
-        const double yw = ca * py - sa * pz;
-        const double zw = sa * py + ca * pz;
+        // Blender gives camera-to-world rotation
+        const cv::Matx33d R_wc_bl = R_cw_bl.t();
+        const cv::Matx33d R_wc_cv = S * R_wc_bl;
+        const cv::Vec3d t_cv = -(R_wc_cv * C_world);
 
-        return cv::Point3d(rigX + px, rigY + yw, rigZ + zw);
+        cv::Matx34d Rt(
+            R_wc_cv(0, 0), R_wc_cv(0, 1), R_wc_cv(0, 2), t_cv(0),
+            R_wc_cv(1, 0), R_wc_cv(1, 1), R_wc_cv(1, 2), t_cv(1),
+            R_wc_cv(2, 0), R_wc_cv(2, 1), R_wc_cv(2, 2), t_cv(2)
+        );
+
+        return K * Rt;
+    }
+
+    cv::Vec3d triangulateWorldPoint(
+        const cv::Point2d& pL,
+        const cv::Point2d& pR,
+        const cv::Matx34d& P1,
+        const cv::Matx34d& P2)
+    {
+        cv::Mat pts1(2, 1, CV_64F);
+        cv::Mat pts2(2, 1, CV_64F);
+
+        pts1.at<double>(0, 0) = pL.x;
+        pts1.at<double>(1, 0) = pL.y;
+        pts2.at<double>(0, 0) = pR.x;
+        pts2.at<double>(1, 0) = pR.y;
+
+        cv::Mat X4;
+        cv::triangulatePoints(P1, P2, pts1, pts2, X4);
+
+        const double w = X4.at<double>(3, 0);
+        if (!std::isfinite(w) || std::abs(w) < 1e-12) {
+            return cv::Vec3d(
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN()
+            );
+        }
+
+        return cv::Vec3d(
+            X4.at<double>(0, 0) / w,
+            X4.at<double>(1, 0) / w,
+            X4.at<double>(2, 0) / w
+        );
+    }
+
+    cv::Vec3d sanitizeWorld(const cv::Vec3d& Xw) {
+        cv::Vec3d out = Xw;
+
+        if (!std::isfinite(out[0]) || !std::isfinite(out[1]) || !std::isfinite(out[2])) {
+            return cv::Vec3d(
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN()
+            );
+        }
+
+        const double courtGroundZ = 0.35951;
+        if (out[2] < courtGroundZ) {
+            out[2] = courtGroundZ;
+        }
+
+        return out;
     }
 
 } // namespace
@@ -94,11 +168,12 @@ std::map<std::string, std::string> parseKeyValueFile(const std::string& filename
         err = "Could not open key/value file: " + filename;
         return out;
     }
+
     std::string line;
     while (std::getline(fin, line)) {
         line = trim(line);
         if (line.empty()) continue;
-        auto eq = line.find('=');
+        const auto eq = line.find('=');
         if (eq == std::string::npos) continue;
         const std::string key = trim(line.substr(0, eq));
         const std::string val = trim(line.substr(eq + 1));
@@ -111,7 +186,8 @@ bool loadConfig(const std::string& filename, Config& cfg, std::string& err) {
     const auto kv = parseKeyValueFile(filename, err);
     if (!err.empty()) return false;
 
-    cfg.f_px = toDouble(kv, "f_px", cfg.f_px);
+    cfg.fx_px = toDouble(kv, "fx_px", cfg.f_px);
+    cfg.fy_px = toDouble(kv, "fy_px", cfg.f_px);    
     cfg.pair1_baseline_m = toDouble(kv, "pair1_baseline_m", cfg.pair1_baseline_m);
     cfg.pair2_baseline_m = toDouble(kv, "pair2_baseline_m", cfg.pair2_baseline_m);
     cfg.net_v_frac = toDouble(kv, "net_v_frac", cfg.net_v_frac);
@@ -165,15 +241,12 @@ DetectionResult detectTennisBallYCbCr(const cv::Mat& bgr, const std::string& tag
     cv::Mat hsv;
     cv::cvtColor(bgr, hsv, cv::COLOR_BGR2HSV);
 
-    // Tight orange-only mask for the rendered ball
     cv::Mat ballMask;
     cv::inRange(hsv, cv::Scalar(5, 120, 120), cv::Scalar(22, 255, 255), ballMask);
 
-    // Light cleanup only
     cv::Mat se = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
     cv::morphologyEx(ballMask, ballMask, cv::MORPH_OPEN, se);
 
-    // Save debug mask so you can inspect what the detector actually sees
     cv::imwrite(tag + "_mask.png", ballMask);
 
     std::vector<std::vector<cv::Point>> contours;
@@ -183,8 +256,8 @@ DetectionResult detectTennisBallYCbCr(const cv::Mat& bgr, const std::string& tag
         return out;
     }
 
-    const double expectedR = 11.0;   // try 2.0 to 3.5
-    const double areaExp = CV_PI * expectedR * expectedR;    
+    const double expectedR = 11.0;
+    const double areaExp = CV_PI * expectedR * expectedR;
     double bestScore = -1e18;
     size_t bestIdx = 0;
 
@@ -198,7 +271,7 @@ DetectionResult detectTennisBallYCbCr(const cv::Mat& bgr, const std::string& tag
 
         const double perimeter = std::max(cv::arcLength(contours[i], true), 1.0);
         const double circularity = 4.0 * CV_PI * area / (perimeter * perimeter);
-        const double aspect = (double)box.width / std::max(box.height, 1);
+        const double aspect = static_cast<double>(box.width) / std::max(box.height, 1);
 
         std::cout << tag
             << " contour " << i
@@ -247,7 +320,7 @@ DetectionResult detectTennisBallYCbCr(const cv::Mat& bgr, const std::string& tag
         const double prox = 1.0 / (1.0 + d2);
         const double areaScore = 1.0 - std::min(std::abs(std::log(std::max(area / areaExp, 0.1))), 2.0) / 2.0;
 
-        double score = 120.0 * circularity
+        const double score = 120.0 * circularity
             + 80.0 * areaScore
             - 25.0 * std::abs(1.0 - aspect)
             + 5000.0 * prox;
@@ -331,7 +404,8 @@ DetectionResult refineWithHoughCircles(const cv::Mat& bgr, const DetectionResult
     out.radius_px = best[2];
 
     std::ostringstream oss;
-    oss << out.debug << " | " << tag << ": Hough refined center=(" << out.center.x << ", " << out.center.y << ") r=" << out.radius_px;
+    oss << out.debug << " | " << tag << ": Hough refined center=("
+        << out.center.x << ", " << out.center.y << ") r=" << out.radius_px;
     out.debug = oss.str();
     return out;
 }
@@ -385,32 +459,57 @@ StereoOutput processFourViews(const cv::Mat& p1L,
 
     const DetectionResult& L = (pairIdx == 1) ? c1L : c2L;
     const DetectionResult& R = (pairIdx == 1) ? c1R : c2R;
-    const double B = (pairIdx == 1) ? cfg.pair1_baseline_m : cfg.pair2_baseline_m;
 
     const double du = L.center.x - R.center.x;
     const double dv = L.center.y - R.center.y;
-    const double dabs = std::abs(du);
-    if (!std::isfinite(dabs) || dabs < 1.0) {
+    if (!std::isfinite(du) || std::abs(du) < 1.0) {
         out.message = dbg.str() + " | Disparity too small for stable depth.";
         return out;
     }
 
-    const double cx = cfg.cx;
-    const double cy = cfg.cy;
-    const double Zcam = (cfg.f_px * B) / dabs;
-    const double Xcam = ((L.center.x - cx) * Zcam) / cfg.f_px;
-    const double Ycam = ((L.center.y - cy) * Zcam) / cfg.f_px;
+    const cv::Matx33d K = makeK(cfg.fx_px, cfg.fy_px, cfg.cx, cfg.cy);
 
-    cv::Point3d world;
+    // Actual Blender camera centers
+    const cv::Vec3d C1(-1.5, -15.0, 12.0);
+    const cv::Vec3d C2(1.5, -15.0, 12.0);
+    const cv::Vec3d C3(-1.5, -3.0, 12.0);
+    const cv::Vec3d C4(1.5, -3.0, 12.0);
+
+    // Actual normalized Blender camera-to-world rotations
+    const cv::Matx33d R12_cw_bl(
+        1.0, 0.0, 0.0,
+        0.0, 0.8660254037844386, -0.5,
+        0.0, 0.5, 0.8660254037844386
+    );
+
+    const cv::Matx33d R34_cw_bl(
+        1.0, 0.0, 0.0,
+        0.0, 0.7880107536067220, -0.6156614753256583,
+        0.0, 0.6156614753256583, 0.7880107536067220
+    );
+
+    cv::Matx34d Pleft, Pright;
+    cv::Vec3d CamL, CamR;
+
     if (pairIdx == 1) {
-        world = cameraToWorldApprox(Xcam, Ycam, Zcam,
-            cfg.pair1_camBaseX, cfg.pair1_camBaseY, cfg.pair1_camBaseZ,
-            cfg.pair1_camPitchDeg);
+        Pleft = makeProjectionFromBlender(K, R12_cw_bl, C1);
+        Pright = makeProjectionFromBlender(K, R12_cw_bl, C2);
+        CamL = C1;
+        CamR = C2;
     }
     else {
-        world = cameraToWorldApprox(Xcam, Ycam, Zcam,
-            cfg.pair2_camBaseX, cfg.pair2_camBaseY, cfg.pair2_camBaseZ,
-            cfg.pair2_camPitchDeg);
+        Pleft = makeProjectionFromBlender(K, R34_cw_bl, C3);
+        Pright = makeProjectionFromBlender(K, R34_cw_bl, C4);
+        CamL = C3;
+        CamR = C4;
+    }
+
+    cv::Vec3d Xw = triangulateWorldPoint(L.center, R.center, Pleft, Pright);
+    Xw = sanitizeWorld(Xw);
+
+    if (!std::isfinite(Xw[0]) || !std::isfinite(Xw[1]) || !std::isfinite(Xw[2])) {
+        out.message = dbg.str() + " | Triangulation failed.";
+        return out;
     }
 
     out.ok = true;
@@ -420,12 +519,17 @@ StereoOutput processFourViews(const cv::Mat& p1L,
     out.right = R.center;
     out.disparity_u = du;
     out.disparity_v = dv;
-    out.X = Xcam;
-    out.Y = Ycam;
-    out.Z = Zcam;
+    out.X = Xw[0];
+    out.Y = Xw[1];
+    out.Z = Xw[2];
 
     std::ostringstream msg;
-    msg << dbg.str() << " | camXYZ=(" << Xcam << ", " << Ycam << ", " << Zcam << ")";
+    msg << dbg.str()
+        << " | pair=" << pairIdx
+        << " | CamL=(" << CamL[0] << "," << CamL[1] << "," << CamL[2] << ")"
+        << " | CamR=(" << CamR[0] << "," << CamR[1] << "," << CamR[2] << ")"
+        << " | worldXYZ=(" << out.X << ", " << out.Y << ", " << out.Z << ")";
     out.message = msg.str();
+
     return out;
 }

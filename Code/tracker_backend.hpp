@@ -6,22 +6,28 @@
 
 struct Config {
     double f_px = 430.0;
-    double pair1_baseline_m = 3.0;
-    double pair2_baseline_m = 3.0;
+
+    // New explicit focal lengths in pixels
+    double fx_px = 853.3333333333;
+    double fy_px = 720.0;
+
+    double pair1_baseline_m = 0.20;
+    double pair2_baseline_m = 0.20;
     double net_v_frac = 0.42;
     double radius_diff_px = 2.0;
+
     int image_width = 1280;
     int image_height = 720;
     double cx = 640.0;
     double cy = 360.0;
 
     double pair1_camBaseX = 0.0;
-    double pair1_camBaseY = -13.0;
+    double pair1_camBaseY = -15.0;
     double pair1_camBaseZ = 12.0;
     double pair1_camPitchDeg = 30.0;
 
     double pair2_camBaseX = 0.0;
-    double pair2_camBaseY = -2.0;
+    double pair2_camBaseY = -3.0;
     double pair2_camBaseZ = 12.0;
     double pair2_camPitchDeg = 38.0;
 };
