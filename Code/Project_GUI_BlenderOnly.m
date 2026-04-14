@@ -26,7 +26,7 @@ BLENDER.pair1.camR = "Camera2";
 BLENDER.pair1.camBaseX = 0.0;
 BLENDER.pair1.camBaseY = -15.0;
 BLENDER.pair1.camBaseZ = 12.0;
-BLENDER.pair1.B_m      = 3.0;
+BLENDER.pair1.B_m      = 3;
 BLENDER.pair1.camPitch = 30.0;
 BLENDER.pair1.camRoll  = 0.0;
 BLENDER.pair1.camYaw   = 0.0;
@@ -36,7 +36,7 @@ BLENDER.pair2.camR = "Camera4";
 BLENDER.pair2.camBaseX = 0.0;
 BLENDER.pair2.camBaseY = -3.0;
 BLENDER.pair2.camBaseZ = 12.0;
-BLENDER.pair2.B_m      = 3.0;
+BLENDER.pair2.B_m      = 3;
 BLENDER.pair2.camPitch = 38.0;
 BLENDER.pair2.camRoll  = 0.0;
 BLENDER.pair2.camYaw   = 0.0;
@@ -53,13 +53,13 @@ defaults.f_px = 853.3333;
 defaults.netVFrac = 0.42;
 defaults.radiusDiffPx = 2.0;
 defaults.overlayRadiusPx = 16;
-defaults.sampleDt = 0.10;
 defaults.maxReplayFPS = 20;
 defaults.outBlinkHz = 10;
-defaults.serveDuration = 0.90;
-defaults.volleyDuration = 0.80;
-defaults.serveNumSamples = 10;
-defaults.volleyNumSamples = 9;
+defaults.sampleDt = 0.05;
+defaults.serveDuration = 1.00;
+defaults.volleyDuration = 0.90;
+defaults.serveNumSamples = 21;
+defaults.volleyNumSamples = 19;
 
 % Real Blender court-plane height from your measured vertices
 WORLD.groundZ = 0.35951;
@@ -117,7 +117,7 @@ ui.CloseRequestFcn = @(~,~) onClose();
 
 main = uigridlayout(ui,[3 3]);
 main.ColumnWidth = {470,'1x','1x'};
-main.RowHeight   = {360, 300, '1x'};
+main.RowHeight   = {430, 230, '1x'};
 main.Padding = [10 10 10 10];
 main.RowSpacing = 10;
 main.ColumnSpacing = 10;
@@ -126,8 +126,8 @@ pCtrl = uipanel(main,'Title','Controls');
 pCtrl.Layout.Row = 1;
 pCtrl.Layout.Column = 1;
 
-g = uigridlayout(pCtrl,[14 3]);
-g.RowHeight = {24,24,24,24,24,30,30,30,30,30,24,24,24,20};
+g = uigridlayout(pCtrl,[16 3]);
+g.RowHeight = {24,24,24,24,24,30,30,30,30,30,30,24,24,24,24,20};
 g.Padding = [6 6 6 6];
 g.RowSpacing = 2;
 g.ColumnSpacing = 6;
@@ -173,16 +173,18 @@ btnCOR.Layout.Row = 10; btnCOR.Layout.Column = [1 3];
 btnReplay = uibutton(g,'Text','Instant Replay','ButtonPushedFcn',@(~,~) onInstantReplay());
 btnReplay.Layout.Row = 11; btnReplay.Layout.Column = [1 3];
 
+btnSweep = uibutton(g,'Text','Run Sweep','ButtonPushedFcn',@(~,~) onRunSweep());
+btnSweep.Layout.Row = 12; btnSweep.Layout.Column = [1 3];
+
 shotSummary = uilabel(g,'Text','Shot: --');
-shotSummary.Layout.Row = 12; shotSummary.Layout.Column = [1 3];
+shotSummary.Layout.Row = 13; shotSummary.Layout.Column = [1 3];
 
 uilabel(g,'Text','LED state');
 lblLED = uilabel(g,'Text','--');
-lblLED.Layout.Row = 13; lblLED.Layout.Column = [2 3];
+lblLED.Layout.Row = 14; lblLED.Layout.Column = [2 3];
 
 statusLabel = uilabel(g,'Text','Idle.');
-statusLabel.Layout.Row = 14; statusLabel.Layout.Column = [1 3];
-
+statusLabel.Layout.Row = 15; statusLabel.Layout.Column = [1 3];
 pL = uipanel(main,'Title','Chosen Left Image');
 pL.Layout.Row = 1; pL.Layout.Column = 2;
 axL = uiaxes(pL);
@@ -199,8 +201,9 @@ pOut = uipanel(main,'Title','Output');
 pOut.Layout.Row = [2 3]; pOut.Layout.Column = 1;
 
 go = uigridlayout(pOut,[16 1]);
-go.RowHeight = {30,26,26,26,26,26,26,26,26,26,26,26,26,26,58,26,'1x'};
-go.Padding = [10 10 10 10];
+go.RowHeight = {30,24,24,24,24,24,24,24,24,24,24,24,24,24,54,24,'1x'};
+go.Padding = [8 8 8 8];
+go.RowSpacing = 1;
 
 lblPair   = uilabel(go,'Text','Chosen pair: --','FontWeight','bold');
 lblCourt  = uilabel(go,'Text','Court side: --');
@@ -443,14 +446,17 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
         drawnow limitrate;
     
         tVec = linspace(0, defaults.serveDuration, defaults.serveNumSamples);
-        shot = captureShotTrajectory(tVec, 'serve');
+        shot = captureShotTrajectory(tVec, 'serve_default');
     
+        % testing the error vs. different locations on court
+        serveStats = computeShotErrorStats(shot);
+        disp(serveStats)
+
         if ~any(shot.valid)
             safeStatus('Serve tracking failed.');
             return;
         end
     
-        shot.name = "Serve";
         shot.decision = classifyInOut(shot.xyzMeas, shot.bounceIdx, COURT, 'serve');
         shot.restitution = computeRestitution(shot.t, shot.xyzMeas, shot.bounceIdx);
     
@@ -479,14 +485,17 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
         drawnow limitrate;
     
         tVec = linspace(0, defaults.volleyDuration, defaults.volleyNumSamples);
-        shot = captureShotTrajectory(tVec, 'volley');
+        shot = captureShotTrajectory(tVec, 'volley_default');
     
+        % Tracking error vs court location for volley
+        volleyStats = computeShotErrorStats(shot);
+        disp(volleyStats)
+
         if ~any(shot.valid)
             safeStatus('Volley tracking failed.');
             return;
         end
     
-        shot.name = "Volley";
         shot.decision = classifyInOut(shot.xyzMeas, shot.bounceIdx, COURT, 'volley');
         shot.restitution = computeRestitution(shot.t, shot.xyzMeas, shot.bounceIdx);
     
@@ -593,9 +602,9 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
         end
     end
 
-    function shot = captureShotTrajectory(tVec, shotType)
+    function shot = captureShotTrajectory(tVec, shotPreset)
         shot = struct( ...
-            'name', string(shotType), ...
+            'name', string(shotPreset), ...
             't', tVec(:), ...
             'xyzTrue', NaN(numel(tVec),3), ...
             'xyzMeas', NaN(numel(tVec),3), ...
@@ -615,7 +624,7 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
                 return;
             end
     
-            ballXYZ = shotFunctionAtTime(tVec(k), shotType);
+            ballXYZ = shotFunctionAtTime(tVec(k), shotPreset);
             shot.xyzTrue(k,:) = ballXYZ;
     
             pt = renderTrackAtBall(ballXYZ, false);
@@ -630,6 +639,14 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
             end
         end
     
+        % Find bounce on full TRUE trajectory first
+        fullBounceIdx = findBounceIndex(shot.xyzTrue);
+        fullBounceIdx = getPrimaryBounceIndex(fullBounceIdx, numel(shot.t));
+    
+        % Save originals before filtering
+        tFull = shot.t;
+        validFull = shot.valid;
+    
         keep = shot.valid;
         shot.t = shot.t(keep);
         shot.xyzTrue = shot.xyzTrue(keep,:);
@@ -640,65 +657,51 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
         shot.framesR = shot.framesR(keep);
         shot.selectedPair = shot.selectedPair(keep);
     
-        shot.bounceIdx = findBounceIndex(shot.xyzTrue);
+        % Map true bounce time to nearest surviving valid sample
+        shot.bounceIdx = [];
+        if ~isempty(fullBounceIdx) && validFull(fullBounceIdx) && ~isempty(shot.t)
+            bounceTime = tFull(fullBounceIdx);
+            [~, kNearest] = min(abs(shot.t - bounceTime));
+            shot.bounceIdx = kNearest;
+        elseif ~isempty(fullBounceIdx) && ~isempty(shot.t)
+            bounceTime = tFull(fullBounceIdx);
+            [~, kNearest] = min(abs(shot.t - bounceTime));
+            shot.bounceIdx = kNearest;
+        end
+            if isempty(shot.bounceIdx) && ~isempty(shot.xyzMeas)
+                [~, kMinMeas] = min(shot.xyzMeas(:,3));
+                if ~isempty(kMinMeas) && isfinite(kMinMeas)
+                    shot.bounceIdx = kMinMeas;
+                end
+            end
+            fprintf('Preset %s | bounceIdx = ', string(shotPreset));
+            disp(shot.bounceIdx)
     end
 
-    function ballXYZ = shotFunctionAtTime(t, shotType)
-        switch lower(string(shotType))
-            case "serve"
-                x0 = -0.6;  y0 = -11.8; z0 = WORLD.groundZ + 1.84;
-                vx = 0.55;  vy = 9.40;  vz = 5.20; g = 9.81;
-
-                x = x0 + vx*t;
-                y = y0 + vy*t;
-                z = z0 + vz*t - 0.5*g*t^2;
-
-                bounceT = 0.72;
-                eApprox = 0.72;
-
-                if t > bounceT
-                    xb = x0 + vx*bounceT;
-                    yb = y0 + vy*bounceT;
-                    zb = max(WORLD.groundZ, z0 + vz*bounceT - 0.5*g*bounceT^2);
-                    vzBefore = vz - g*bounceT;
-                    vzAfter = abs(vzBefore) * eApprox;
-                    dt = t - bounceT;
-
-                    x = xb + vx*dt;
-                    y = yb + vy*dt;
-                    z = zb + vzAfter*dt - 0.5*g*dt^2;
-                end
-
-            case "volley"
-                x0 = 0.35;  y0 = -4.2; z0 = WORLD.groundZ + 1.64;
-                vx = -0.40; vy = 7.60; vz = 2.80; g = 9.81;
-
-                x = x0 + vx*t;
-                y = y0 + vy*t;
-                z = z0 + vz*t - 0.5*g*t^2;
-
-                bounceT = 0.58;
-                eApprox = 0.67;
-
-                if t > bounceT
-                    xb = x0 + vx*bounceT;
-                    yb = y0 + vy*bounceT;
-                    zb = max(WORLD.groundZ, z0 + vz*bounceT - 0.5*g*bounceT^2);
-                    vzBefore = vz - g*bounceT;
-                    vzAfter = abs(vzBefore) * eApprox;
-                    dt = t - bounceT;
-
-                    x = xb + vx*dt;
-                    y = yb + vy*dt;
-                    z = zb + vzAfter*dt - 0.5*g*dt^2;
-                end
-
-            otherwise
-                x = 0;
-                y = -7.5;
-                z = WORLD.groundZ + eZ.Value;
+    function ballXYZ = shotFunctionAtTime(t, shotPreset)
+        if ischar(shotPreset) || isstring(shotPreset)
+            preset = getShotPreset(shotPreset, WORLD.groundZ);
+        else
+            preset = shotPreset;
         end
-
+    
+        x = preset.x0 + preset.vx*t;
+        y = preset.y0 + preset.vy*t;
+        z = preset.z0 + preset.vz*t - 0.5*preset.g*t^2;
+    
+        if t > preset.bounceT
+            xb = preset.x0 + preset.vx*preset.bounceT;
+            yb = preset.y0 + preset.vy*preset.bounceT;
+            zb = max(WORLD.groundZ, preset.z0 + preset.vz*preset.bounceT - 0.5*preset.g*preset.bounceT^2);
+            vzBefore = preset.vz - preset.g*preset.bounceT;
+            vzAfter  = abs(vzBefore) * preset.eApprox;
+            dt = t - preset.bounceT;
+    
+            x = xb + preset.vx*dt;
+            y = yb + preset.vy*dt;
+            z = zb + vzAfter*dt - 0.5*preset.g*dt^2;
+        end
+    
         z = max(WORLD.groundZ, z);
         ballXYZ = [x, y, z];
     end
@@ -711,12 +714,12 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
     
         z = xyz(:,3);
     
-        for k = 2:size(xyz,1)-1
-            if z(k) <= z(k-1) && z(k) <= z(k+1)
-                if z(k) <= WORLD.groundZ + 0.20
-                    idx(end+1) = k; %#ok<AGROW>
-                end
-            end
+        % Prefer the global minimum, which is much more robust than
+        % requiring a very low local minimum threshold.
+        [~, idxMin] = min(z);
+    
+        if idxMin > 1 && idxMin < size(xyz,1)
+            idx = idxMin;
         end
     end
 
@@ -805,19 +808,23 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
             hBounce.YData = bp(:,2);
             hBounce.ZData = bp(:,3);
         end
-        if ~isempty(shot.xyzTrue) && ~isempty(shot.xyzMeas) && size(shot.xyzTrue,1) == size(shot.xyzMeas,1)
-            d = shot.xyzMeas - shot.xyzTrue;
-            e = sqrt(sum(d.^2,2));
-            dxMean = mean(d(:,1),'omitnan');
-            dyMean = mean(d(:,2),'omitnan');
-            dzMean = mean(d(:,3),'omitnan');
-            eMean  = mean(e,'omitnan');
-            eMax   = max(e,[],'omitnan');
-        
-            lblErr.Text = sprintf('Error: mean dX=%+.3f  dY=%+.3f  dZ=%+.3f  |e|mean=%.3f  |e|max=%.3f m', ...
-                dxMean, dyMean, dzMean, eMean, eMax);
+        stats = computeShotErrorStats(shot);
+        if stats.ok
+            lblErr.Text = sprintf(['Error: mean dX=%+.3f  dY=%+.3f  dZ=%+.3f  ' ...
+                '|e|mean=%.3f  |e|max=%.3f  RMSE=%.3f m'], ...
+                stats.meanDx, stats.meanDy, stats.meanDz, ...
+                stats.meanE, stats.maxE, stats.rmseE);
         else
             lblErr.Text = 'Error: --';
+        end
+        if stats.bounceError.available
+            fprintf('Bounce error: dX=%+.3f  dY=%+.3f  dZ=%+.3f  |e|=%.3f m\n', ...
+                stats.bounceError.dx, ...
+                stats.bounceError.dy, ...
+                stats.bounceError.dz, ...
+                stats.bounceError.e);
+        else
+            fprintf('No bounce error available.\n');
         end
     end
 
@@ -1082,13 +1089,14 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
     function writeBackendConfig(filename, f_px, netFrac, radiusDiff, BL)
         fid = fopen(filename,'w');
         cleaner = onCleanup(@() fclose(fid)); %#ok<NASGU>
-        fx_px = 24/36 * BL.width;
-        fy_px = 24/24 * BL.height;
-        
+    
+        fx_px = f_px;
+        fy_px = f_px;
+    
         fprintf(fid,'fx_px=%.12g\n', fx_px);
         fprintf(fid,'fy_px=%.12g\n', fy_px);
-        fprintf(fid,'cx=%.12g\n', BL.width/2);
-        fprintf(fid,'cy=%.12g\n', BL.height/2);
+        fprintf(fid,'cx=%.12g\n', (BL.width - 1)/2);
+        fprintf(fid,'cy=%.12g\n', (BL.height - 1)/2);
         fprintf(fid,'pair1_baseline_m=%.12g\n', BL.pair1.B_m);
         fprintf(fid,'pair2_baseline_m=%.12g\n', BL.pair2.B_m);
         fprintf(fid,'net_v_frac=%.12g\n', netFrac);
@@ -1246,7 +1254,7 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
     end
 
     function setButtonState(stateStr)
-        objs = {btnRun, btnClear, btnServe, btnVolley, btnCOR, btnReplay};
+        objs = {btnRun, btnClear, btnServe, btnVolley, btnCOR, btnReplay, btnSweep};
         for ii = 1:numel(objs)
             if ~isempty(objs{ii}) && isvalid(objs{ii})
                 objs{ii}.Enable = stateStr;
@@ -1394,4 +1402,31 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
     
         hold(axCourt,'off');
     end
+
+    function shot = trackPresetForSweep(presetName, duration, numSamples)
+        tVec = linspace(0, duration, numSamples);
+        shot = captureShotTrajectory(tVec, presetName);
+    end
+
+    function onRunSweep()
+        if busy || ~isUIAlive(), return; end
+    
+        safeStatus('Running shot sweep...');
+        drawnow limitrate;
+    
+        presetNames = ["serve_default","serve_t","serve_wide","serve_body", ...
+                       "volley_default","volley_short","volley_deep","volley_cross"];
+    
+        try
+            resultsTbl = runShotSweep(@trackPresetForSweep, presetNames, defaults.sampleDt, []);
+            disp(resultsTbl)
+    
+            safeMsg(["Sweep complete."; string(evalc('disp(resultsTbl)'))]);
+            safeStatus('Shot sweep complete.');
+        catch ME
+            safeStatus('Shot sweep failed.');
+            safeMsg(["Shot sweep failed:"; string(getReport(ME,'extended','hyperlinks','off'))]);
+        end
+    end
+
 end
