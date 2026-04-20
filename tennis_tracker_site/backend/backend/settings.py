@@ -31,13 +31,17 @@ ALLOWED_HOSTS=[
     '127.0.0.1'
 ]
 
+# Autofield for list
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
 # Application definition
 INSTALLED_APPS=[
+    'daphne',
     'django.contrib.contenttypes',
     'django.contrib.staticfiles',
     'rest_framework',
     'channels',
-    'tracker'
+    'backend'
 ]
 
 

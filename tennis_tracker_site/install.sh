@@ -1,15 +1,15 @@
 ## Installs the requirements needed for the web app
 
 ## Install packages
-pip install -r docs/requirements.txt
+pip install -r docs/libraries.txt
 
 ## Run backend
 cd backend
-python manage.py migrate
-python manage.py runserver
+python3 manage.py migrate
+python3 manage.py runserver
 
 ## Add sample data in Django shell
-python manage.py shell
+python3 manage.py shell
 
 from backend.models import TennisEntry
 TennisEntry.objects.create(

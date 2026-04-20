@@ -1,4 +1,4 @@
 ## Run Web app
 
 cd frontend
-python app.py
+python3 app.py
