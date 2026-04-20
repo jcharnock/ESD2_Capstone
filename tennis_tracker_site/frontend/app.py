@@ -13,14 +13,16 @@ API_URL = 'http://127.0.0.1:8000/api/entries/'
 class TennisTracker(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle('Tennis Tracker')
+        self.counter = 0
         self.resize(1280, 720)
 
         # Build UI 
         self.setup_ui()
 
-        # load site
+        # pull entries & load site
         self.refresh_data()
+        #DEBUG: load fake SQL list
+        #self.debug_refresh_data()
 
         # 10 second refresh
         self.timer = QTimer()
@@ -33,18 +35,19 @@ class TennisTracker(QWidget):
         # Tennis Tracker label
         title = QLabel('Tennis Tracker')
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet('font-size: 26px;')
+        title.setStyleSheet('font-size: 80px;')
         main.addWidget(title)
 
-        # Top section
+        # top label
         top = QHBoxLayout()
 
         self.info = QLabel('Timestamp: --\nX Coordinate: --\nY Coordinate: --')
+        self.info.setStyleSheet('font-size: 30px;')
         top.addWidget(self.info)
 
         # blank court image info
         self.image = QLabel('Court Image Here')
-        self.image.setFixedSize(210, 80)
+        self.image.setFixedSize(480, 240)
         self.image.setAlignment(Qt.AlignCenter)
         self.image.setStyleSheet('background:#a8cc2d;')
         top.addWidget(self.image)
@@ -54,39 +57,101 @@ class TennisTracker(QWidget):
         # Ruling
         self.ruling = QLabel('RULING: --')
         self.ruling.setAlignment(Qt.AlignCenter)
-        self.ruling.setStyleSheet('font-size: 28px;')
+        self.ruling.setStyleSheet(
+              'font-size: 60px;'
+              'font-weight: bold;'
+        )
         main.addWidget(self.ruling)
 
         # Scrollable entry list
         self.entries = QListWidget()
+        self.entries.setStyleSheet(
+                'font-size: 24px;'
+                'padding: 8px;' 
+            )
         main.addWidget(self.entries)
+        self.entries.itemClicked.connect(self.load_selected_entry)
 
-'''    def refresh_data(self):
+    # Load the clicked entry onto main GUI
+    def load_selected_entry(self, item):
+            row = item.data(Qt.UserRole)
+            if row:
+                self.entry_clicked(row)
+
+
+    #DEBUG: refresh data w/ junk
+    ''' def debug_refresh_data(self):
+        self.counter += 1
+
+        text = (
+            f"Entry #{self.counter}\n"
+            f"Timestamp: {self.counter}"
+            )
+        item = QListWidgetItem(text)
+        self.entries.insertItem(0, item) '''
+
+    # check for SQL data
+    def refresh_data(self):
         try:
             response = requests.get(API_URL, timeout=5)
             data = response.json()
 
             if not data:
                 return
+            
+            # store data into entries
+            self.entries = data
 
-            latest = data[0] '''
+            for row in data:
+                # DEBUG: add data to rows
+                text = (
+                    f"Entry #{row['entry_number']}\n"
+                    f"Timestamp: {row['timestamp']}"
+                )
+                item = QListWidgetItem(text)
+                # Store full row in item
+                item.setData(Qt.UserRole, row)
+                # insert item at top of list
+                self.entries.insertItem(0, item)
 
-'''    def entry_clicked(self):
-        # check to see if entry was clicked
+        except Exception as e:
+            print("Refresh Error:", e)
 
-        # Update left info panel
+    # run when list entry is clicked to update display
+    def entry_clicked(self, row):
+            # Update left info panel
             self.info.setText(
-                f"Timestamp: {latest['timestamp']}\n"
-                f"X Coordinate: {latest['x_coordinate']}\n"
-                f"Y Coordinate: {latest['y_coordinate']}"
+                f"Timestamp: {row['timestamp']}\n"
+                f"X Coordinate: {row['x_coordinate']}\n"
+                f"Y Coordinate: {row['y_coordinate']}"
             )
         # Update Ruling
             self.ruling.setText(
-                f"RULING: {latest['ruling']}"
+                f"RULING: {row['ruling']}"
             )
         # Update court image
-        new_court = QPixmap("path/to/image.png") # FIX LATER
-        scaled_court = new_court.scaled(210, 80, aspectMode=Qt.KeepAspectRatio)
-        self.image.setPixmap(scaled_court) '''
+            image_path = row.get("court_image")
+            if image_path:
+                pixmap = QPixmap(image_path)
+                if not pixmap.isNull():
+                    self.image_label.setPixmap(
+                        pixmap.scaled( 
+                            480, # length
+                            240, # width
+                            Qt.KeepAspectRatio,
+                            Qt.SmoothTransformation
+                        )
+                    )
+                    return
+            # if image is missing set instead
+            self.image_label.setText("No Image")
+            self.image_label.setPixmap(QPixmap())
 
-sys.exit(app.exec())
+# DEBUG: run application in window
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = TennisTracker()
+    window.show()
+    sys.exit(app.exec())
+
+#sys.exit(app.exec())
