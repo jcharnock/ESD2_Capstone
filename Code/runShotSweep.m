@@ -23,7 +23,13 @@ function resultsTbl = runShotSweep(trackFcn, presetNames, sampleDt, durations)
 
     for i = 1:numel(presetNames)
         presetName = string(presetNames(i));
-        preset = getShotPreset(presetName);
+
+        % Keep the user-facing sweep names, but map them to the
+        % internal preset names used by Project_GUI_Development_v1.m
+        trackPresetName = mapSweepPresetName(presetName);
+
+        % Summary label/type for the results table
+        [displayPreset, displayType] = getDisplayInfo(presetName);
 
         if isempty(durations)
             if startsWith(lower(presetName), "serve")
@@ -38,7 +44,8 @@ function resultsTbl = runShotSweep(trackFcn, presetNames, sampleDt, durations)
             numSamples = max(2, round(duration / sampleDt) + 1);
         end
 
-        shot = trackFcn(presetName, duration, numSamples);
+        % IMPORTANT: call the GUI tracker with the mapped legacy preset name
+        shot = trackFcn(trackPresetName, duration, numSamples);
         stats = computeShotErrorStats(shot);
 
         bounceE = NaN;
@@ -47,8 +54,8 @@ function resultsTbl = runShotSweep(trackFcn, presetNames, sampleDt, durations)
         end
 
         row = table( ...
-            string(preset.name), ...
-            string(preset.type), ...
+            string(displayPreset), ...
+            string(displayType), ...
             stats.n, ...
             stats.meanDx, stats.meanDy, stats.meanDz, ...
             stats.meanE, stats.maxE, stats.rmseE, ...
@@ -66,4 +73,41 @@ function resultsTbl = runShotSweep(trackFcn, presetNames, sampleDt, durations)
     end
 
     resultsTbl = rows;
+end
+
+function legacyName = mapSweepPresetName(presetName)
+    switch lower(string(presetName))
+        case "serve_default"
+            legacyName = "serve_in_1";
+        case "serve_t"
+            legacyName = "serve_in_2";
+        case "serve_wide"
+            legacyName = "serve_out_1";
+        case "serve_body"
+            legacyName = "serve_out_2";
+        case "volley_default"
+            legacyName = "volley_in_1";
+        case "volley_short"
+            legacyName = "volley_in_2";
+        case "volley_deep"
+            legacyName = "volley_out_1";
+        case "volley_cross"
+            legacyName = "volley_out_2";
+        otherwise
+            error('Unknown sweep preset: %s', string(presetName));
+    end
+end
+
+function [displayPreset, displayType] = getDisplayInfo(presetName)
+    switch lower(string(presetName))
+        case {"serve_default","serve_t","serve_wide","serve_body"}
+            displayPreset = string(presetName);
+            displayType = "serve";
+        case {"volley_default","volley_short","volley_deep","volley_cross"}
+            displayPreset = string(presetName);
+            displayType = "volley";
+        otherwise
+            displayPreset = string(presetName);
+            displayType = "unknown";
+    end
 end

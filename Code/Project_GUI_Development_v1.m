@@ -1,5 +1,5 @@
 function Project_GUI_Development_v1
-%% Project GUI + Blender Only
+%% Project GUI + Blender 
 % MATLAB handles:
 %   - GUI
 %   - Blender rendering control
@@ -1622,52 +1622,70 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
         end
     end
 
-    function onRunValidation()
-        if busy || ~isUIAlive(), return; end
+   function onRunValidation()
+        disp(['busy = ' num2str(busy)])
+        disp(['isUIAlive = ' num2str(isUIAlive())])
+    
+        if busy || ~isUIAlive() 
+            disp('RETURNING EARLY FROM onRunValidation');
+            return; 
+        end
+    
+        disp('ENTERED onRunValidation')
+        safeStatus('ENTERED onRunValidation');
+        drawnow;
     
         safeStatus('Running full validation...');
         drawnow limitrate;
     
         try
+            disp('START onRunValidation')
+
             staticTbl = runStaticValidation();
-            shotTbl   = runShotSweep(@trackPresetForSweep, ...
+            disp('DONE runStaticValidation')
+            disp(size(staticTbl))
+            
+            shotTbl = runShotSweep(@trackPresetForSweep, ...
                 ["serve_default","serve_t","serve_wide","serve_body", ...
                  "volley_default","volley_short","volley_deep","volley_cross"], ...
                 defaults.sampleDt, []);
-    
+            disp('DONE runShotSweep')
+            disp(size(shotTbl))
+            
+            staticSummary = summarizeStaticValidation(staticTbl);
+            disp('DONE summarizeStaticValidation')
+            
+            shotSummaryTbl = summarizeShotValidation(shotTbl);
+            disp('DONE summarizeShotValidation')
+            
             disp('=== STATIC VALIDATION ===')
             disp(staticTbl)
-    
+            
             disp('=== SHOT VALIDATION ===')
             disp(shotTbl)
-    
-            staticSummary = summarizeStaticValidation(staticTbl);
-            shotSummaryTbl = summarizeShotValidation(shotTbl);
-    
+            
             disp('=== STATIC SUMMARY ===')
             disp(staticSummary)
-    
+            
             disp('=== SHOT SUMMARY ===')
             disp(shotSummaryTbl)
-    
-            plotStaticErrorMap(staticTbl);
-            plotStaticErrorByHeight(staticTbl);
-            plotStaticFailureMap(staticTbl);
 
-            safeMsg([ ...
-                "Validation complete."; ...
-                " "; ...
-                "STATIC SUMMARY:"; ...
-                string(evalc('disp(staticSummary)')); ...
-                " "; ...
-                "SHOT SUMMARY:"; ...
-                string(evalc('disp(shotSummaryTbl)')) ...
-            ]);
-    
-            safeStatus('Validation complete.');
+            disp('ABOUT TO PLOT error map')
+            plotStaticErrorMap(staticTbl);
+            
+            disp('ABOUT TO PLOT error by height')
+            plotStaticErrorByHeight(staticTbl);
+            
+            disp('ABOUT TO PLOT failure map')
+            plotStaticFailureMap(staticTbl);
+            
+            disp('FINISHED onRunValidation')
         catch ME
+            disp('=== VALIDATION FAILED ===');
+            disp(getReport(ME,'extended','hyperlinks','off'));
             safeStatus('Validation failed.');
             safeMsg(["Validation failed:"; string(getReport(ME,'extended','hyperlinks','off'))]);
+            rethrow(ME);
         end
     end
 
@@ -1686,6 +1704,7 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
 
                     for ir = 1:nRep
                         pt = renderTrackAtBall(xyzTrue, false);
+                        drawnow;
 
                         if pt.ok
                             dx = pt.X - xyzTrue(1);
@@ -1854,66 +1873,56 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
     end
 
     function plotStaticFailureMap(T)
-        Gall = groupsummary(T, {'Xtrue','Ytrue','Ztrue'}, 'numel', 'e');
-        Gok  = groupsummary(T(isfinite(T.e),:), {'Xtrue','Ytrue','Ztrue'}, 'numel', 'e');
-    
-        Gall.Properties.VariableNames{'GroupCount'} = 'nTotal';
-        Gok.Properties.VariableNames{'GroupCount'}  = 'nValid';
-    
-        G = outerjoin(Gall(:,{'Xtrue','Ytrue','Ztrue','nTotal'}), ...
-                      Gok(:,{'Xtrue','Ytrue','Ztrue','nValid'}), ...
-                      'Keys',{'Xtrue','Ytrue','Ztrue'}, ...
-                      'MergeKeys',true);
-    
-        if ~ismember('nValid', G.Properties.VariableNames)
-            G.nValid = zeros(height(G),1);
+        if isempty(T) || height(T) == 0
+            figure('Name','Static Validation Failure Map','Color','w');
+            title('No static validation data');
+            return;
         end
-        G.nValid(isnan(G.nValid)) = 0;
-        G.failFrac = 1 - G.nValid ./ G.nTotal;
     
-        zLevels = unique(G.Ztrue);
-        nZ = numel(zLevels);
+        % Define failures
+        if ismember('success', T.Properties.VariableNames)
+            failMask = ~T.success;
+        elseif ismember('e', T.Properties.VariableNames)
+            failMask = ~isfinite(T.e);
+        else
+            failMask = false(height(T),1);
+        end
     
-        f = figure('Name','Static Validation Failure Map','Color','w', ...
-            'Position',[120 120 1400 420]);
+        % Group by true XYZ
+        [G, Xv, Yv, Zv] = findgroups(T.Xtrue, T.Ytrue, T.Ztrue);
     
-        tl = tiledlayout(1, nZ, 'Padding','compact', 'TileSpacing','compact');
+        totalCount = splitapply(@numel, T.Xtrue, G);
+        failCount  = splitapply(@sum, double(failMask), G);
+        failRate   = failCount ./ max(totalCount, 1);
     
-        for i = 1:nZ
+        S = table(Xv, Yv, Zv, totalCount, failCount, failRate, ...
+            'VariableNames', {'Xtrue','Ytrue','Ztrue','GroupCount','FailCount','FailRate'});
+    
+        zVals = unique(S.Ztrue);
+        figure('Name','Static Validation Failure Map','Color','w');
+        tiledlayout(numel(zVals),1,'Padding','compact','TileSpacing','compact');
+    
+        for k = 1:numel(zVals)
+            z0 = zVals(k);
+            Sz = S(S.Ztrue == z0, :);
+    
             nexttile;
-            hold on;
-            grid on;
-    
-            zNow = zLevels(i);
-            Gi = G(abs(G.Ztrue - zNow) < 1e-9,:);
-    
-            xw = [COURT.polyX COURT.polyX(1)];
-            yw = [COURT.polyY COURT.polyY(1)];
-            plot(yw, -xw, 'k-', 'LineWidth', 1.2);
-    
-            scatter(Gi.Ytrue, -Gi.Xtrue, 90, Gi.failFrac, 'filled', 'MarkerEdgeColor','k');
-    
-            for k = 1:height(Gi)
-                text(Gi.Ytrue(k)+0.15, -Gi.Xtrue(k), sprintf('%.0f%%', 100*Gi.failFrac(k)), ...
-                    'FontSize',8);
-            end
-    
-            xlabel('Y (m)');
-            ylabel('-X (m)');
-            title(sprintf('Failure Map | Z = %.3f m', zNow));
-            axis equal;
-    
-            xlim([min(COURT.polyY)-1, max(COURT.polyY)+1]);
-            ylim([-max(COURT.polyX)-1, -min(COURT.polyX)+1]);
-    
-            cb = colorbar;
-            cb.Label.String = 'Failure fraction';
+            scatter(Sz.Xtrue, Sz.Ytrue, 140, Sz.FailRate, 'filled');
+            colorbar;
             caxis([0 1]);
+            grid on;
+            axis equal;
+            xlabel('X true');
+            ylabel('Y true');
+            title(sprintf('Failure Rate at Z = %.3f m', z0));
     
-            hold off;
+            for i = 1:height(Sz)
+                text(Sz.Xtrue(i), Sz.Ytrue(i), sprintf(' %.2f', Sz.FailRate(i)), ...
+                    'FontSize', 8, ...
+                    'HorizontalAlignment', 'left', ...
+                    'VerticalAlignment', 'middle');
+            end
         end
-    
-        title(tl, 'Static Validation Failure Rate by Court Position');
     end
 
     function onRunWeakValidation()
@@ -1966,7 +1975,8 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
     
                     for ir = 1:nRep
                         pt = renderTrackAtBall(xyzTrue, false);
-    
+                        drawnow;
+                        
                         if pt.ok
                             dx = pt.X - xyzTrue(1);
                             dy = pt.Y - xyzTrue(2);
