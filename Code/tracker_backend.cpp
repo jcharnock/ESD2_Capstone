@@ -79,6 +79,45 @@ namespace {
         );
     }
 
+    static cv::Matx33d rotXdeg(double deg)
+    {
+        const double a = deg * CV_PI / 180.0;
+        const double c = std::cos(a);
+        const double s = std::sin(a);
+
+        return cv::Matx33d(
+            1.0, 0.0, 0.0,
+            0.0, c, -s,
+            0.0, s, c
+        );
+    }
+
+    static cv::Matx33d rotYdeg(double deg)
+    {
+        const double a = deg * CV_PI / 180.0;
+        const double c = std::cos(a);
+        const double s = std::sin(a);
+
+        return cv::Matx33d(
+            c, 0.0, s,
+            0.0, 1.0, 0.0,
+            -s, 0.0, c
+        );
+    }
+
+    static cv::Matx33d rotZdeg(double deg)
+    {
+        const double a = deg * CV_PI / 180.0;
+        const double c = std::cos(a);
+        const double s = std::sin(a);
+
+        return cv::Matx33d(
+            c, -s, 0.0,
+            s, c, 0.0,
+            0.0, 0.0, 1.0
+        );
+    }
+
     cv::Matx34d makeProjectionFromBlender(
         const cv::Matx33d& K,
         const cv::Matx33d& R_cw_bl,
@@ -94,7 +133,7 @@ namespace {
         );
 
         // Blender gives camera-to-world rotation
-        const cv::Matx33d R_wc_bl = R_cw_bl.t();
+        const cv::Matx33d R_wc_bl = R_cw_bl;
         const cv::Matx33d R_wc_cv = S * R_wc_bl;
         const cv::Vec3d t_cv = -(R_wc_cv * C_world);
 
@@ -141,9 +180,7 @@ namespace {
     }
 
     cv::Vec3d sanitizeWorld(const cv::Vec3d& Xw) {
-        cv::Vec3d out = Xw;
-
-        if (!std::isfinite(out[0]) || !std::isfinite(out[1]) || !std::isfinite(out[2])) {
+        if (!std::isfinite(Xw[0]) || !std::isfinite(Xw[1]) || !std::isfinite(Xw[2])) {
             return cv::Vec3d(
                 std::numeric_limits<double>::quiet_NaN(),
                 std::numeric_limits<double>::quiet_NaN(),
@@ -151,12 +188,7 @@ namespace {
             );
         }
 
-        const double courtGroundZ = 0.35951;
-        if (out[2] < courtGroundZ) {
-            out[2] = courtGroundZ;
-        }
-
-        return out;
+        return Xw;
     }
 
 } // namespace
@@ -200,6 +232,10 @@ bool loadConfig(const std::string& filename, Config& cfg, std::string& err) {
     cfg.pair1_camBaseY = toDouble(kv, "pair1_camBaseY", cfg.pair1_camBaseY);
     cfg.pair1_camBaseZ = toDouble(kv, "pair1_camBaseZ", cfg.pair1_camBaseZ);
     cfg.pair1_camPitchDeg = toDouble(kv, "pair1_camPitchDeg", cfg.pair1_camPitchDeg);
+    cfg.pair1_camYawDeg = toDouble(kv, "pair1_camYawDeg", cfg.pair1_camYawDeg);
+    cfg.pair1_camRollDeg = toDouble(kv, "pair1_camRollDeg", cfg.pair1_camRollDeg);
+    cfg.pair2_camYawDeg = toDouble(kv, "pair2_camYawDeg", cfg.pair2_camYawDeg);
+    cfg.pair2_camRollDeg = toDouble(kv, "pair2_camRollDeg", cfg.pair2_camRollDeg);
     cfg.pair2_camBaseX = toDouble(kv, "pair2_camBaseX", cfg.pair2_camBaseX);
     cfg.pair2_camBaseY = toDouble(kv, "pair2_camBaseY", cfg.pair2_camBaseY);
     cfg.pair2_camBaseZ = toDouble(kv, "pair2_camBaseZ", cfg.pair2_camBaseZ);
@@ -238,21 +274,65 @@ DetectionResult detectTennisBallYCbCr(const cv::Mat& bgr, const std::string& tag
         return out;
     }
 
+    // --- Convert to HSV for hue-based yellow detection ---
     cv::Mat hsv;
     cv::cvtColor(bgr, hsv, cv::COLOR_BGR2HSV);
 
-    cv::Mat ballMask;
-    cv::inRange(hsv, cv::Scalar(5, 120, 120), cv::Scalar(22, 255, 255), ballMask);
+    // Yellow in OpenCV HSV is typically around H = 20..40
+    // Start a bit broad, then tighten later if needed.
+    cv::Mat hsvMask;
+    cv::inRange(hsv, cv::Scalar(16, 70, 70), cv::Scalar(45, 255, 255), hsvMask);
 
-    cv::Mat se = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-    cv::morphologyEx(ballMask, ballMask, cv::MORPH_OPEN, se);
+    // --- Extra BGR logic to reject court colors ---
+    // Yellow ball should have:
+    //   R high, G high, B lower
+    // This helps reject blue / green / red court regions.
+    std::vector<cv::Mat> ch;
+    cv::split(bgr, ch);   // ch[0]=B, ch[1]=G, ch[2]=R
+
+    cv::Mat b = ch[0], g = ch[1], r = ch[2];
+
+    cv::Mat rgHigh, rbDiff, gbDiff, rgClose;
+    cv::compare(r, 110, rgHigh, cv::CMP_GT);              // R > 110
+    cv::Mat gHigh;
+    cv::compare(g, 110, gHigh, cv::CMP_GT);               // G > 110
+    cv::bitwise_and(rgHigh, gHigh, rgHigh);
+
+    cv::Mat rMinusB, gMinusB, rMinusG, gMinusR;
+    cv::subtract(r, b, rMinusB);
+    cv::subtract(g, b, gMinusB);
+    cv::subtract(r, g, rMinusG);
+    cv::subtract(g, r, gMinusR);
+
+    cv::compare(rMinusB, 35, rbDiff, cv::CMP_GT);         // R significantly above B
+    cv::compare(gMinusB, 20, gbDiff, cv::CMP_GT);         // G significantly above B
+
+    // |R-G| < 90
+    cv::Mat rgAbsDiff;
+    cv::absdiff(r, g, rgAbsDiff);
+    cv::compare(rgAbsDiff, 90, rgClose, cv::CMP_LT);
+
+    cv::Mat bgrMask;
+    cv::bitwise_and(rgHigh, rbDiff, bgrMask);
+    cv::bitwise_and(bgrMask, gbDiff, bgrMask);
+    cv::bitwise_and(bgrMask, rgClose, bgrMask);
+
+    // Final color mask = HSV yellow AND BGR yellow-like
+    cv::Mat ballMask;
+    cv::bitwise_and(hsvMask, bgrMask, ballMask);
+
+    // Clean up noise
+    cv::Mat seOpen = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+    cv::Mat seClose = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5));
+    cv::morphologyEx(ballMask, ballMask, cv::MORPH_OPEN, seOpen);
+    cv::morphologyEx(ballMask, ballMask, cv::MORPH_CLOSE, seClose);
 
     cv::imwrite(tag + "_mask.png", ballMask);
 
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(ballMask, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
     if (contours.empty()) {
-        out.debug = tag + ": no contours after orange HSV mask";
+        out.debug = tag + ": no contours after yellow mask";
         return out;
     }
 
@@ -304,6 +384,16 @@ DetectionResult detectTennisBallYCbCr(const cv::Mat& bgr, const std::string& tag
             continue;
         }
 
+        if (cTmp.y > 0.90f * bgr.rows) {
+            std::cout << "  rejected: too low in image\n";
+            continue;
+        }
+
+        if (aspect < 0.35) {
+            std::cout << "  rejected: aspect too skinny\n";
+            continue;
+        }
+
         if (rTmp < 3.0f || rTmp > 20.0f) {
             std::cout << "  rejected: radius out of range\n";
             continue;
@@ -341,17 +431,32 @@ DetectionResult detectTennisBallYCbCr(const cv::Mat& bgr, const std::string& tag
         return out;
     }
 
-    cv::Point2f c;
-    float r = 0.0f;
-    cv::minEnclosingCircle(contours[bestIdx], c, r);
-    out.valid = std::isfinite(c.x) && std::isfinite(c.y) && r > 0.0f;
-    out.center = cv::Point2d(c.x, c.y);
-    out.radius_px = r;
+    const auto& bestContour = contours[bestIdx];
+
+    cv::Moments mu = cv::moments(bestContour);
+    if (std::abs(mu.m00) > 1e-9) {
+        out.center = cv::Point2d(mu.m10 / mu.m00, mu.m01 / mu.m00);
+    }
+    else {
+        cv::Point2f c;
+        float r = 0.0f;
+        cv::minEnclosingCircle(bestContour, c, r);
+        out.center = cv::Point2d(c.x, c.y);
+    }
+
+    cv::Point2f cCirc;
+    float rCirc = 0.0f;
+    cv::minEnclosingCircle(bestContour, cCirc, rCirc);
+
+    out.valid = std::isfinite(out.center.x) && std::isfinite(out.center.y) && rCirc > 0.0f;
+    out.radius_px = rCirc;
 
     std::ostringstream oss;
-    oss << tag << ": orange HSV mask center=(" << c.x << ", " << c.y << ") r=" << r
+    oss << tag << ": yellow mask center=(" << out.center.x << ", " << out.center.y
+        << ") r=" << out.radius_px
         << " contours=" << contours.size();
     out.debug = oss.str();
+
     return out;
 }
 
@@ -360,11 +465,14 @@ DetectionResult refineWithHoughCircles(const cv::Mat& bgr, const DetectionResult
 
     DetectionResult out = coarse;
 
-    const int roiHalf = std::max(24, static_cast<int>(std::round(2.8 * std::max(coarse.radius_px, 4.0))));
+    const double r0 = std::max(coarse.radius_px, 4.0);
+    const int roiHalf = std::max(20, static_cast<int>(std::round(2.2 * r0)));
+
     const int x1 = std::max(0, static_cast<int>(std::floor(coarse.center.x - roiHalf)));
     const int y1 = std::max(0, static_cast<int>(std::floor(coarse.center.y - roiHalf)));
     const int x2 = std::min(bgr.cols - 1, static_cast<int>(std::ceil(coarse.center.x + roiHalf)));
     const int y2 = std::min(bgr.rows - 1, static_cast<int>(std::ceil(coarse.center.y + roiHalf)));
+
     if (x2 <= x1 + 8 || y2 <= y1 + 8) {
         out.debug += " | " + tag + ": ROI too small; using coarse";
         return out;
@@ -372,41 +480,81 @@ DetectionResult refineWithHoughCircles(const cv::Mat& bgr, const DetectionResult
 
     cv::Rect roi(x1, y1, x2 - x1 + 1, y2 - y1 + 1);
     cv::Mat crop = bgr(roi).clone();
+
     cv::Mat gray;
     cv::cvtColor(crop, gray, cv::COLOR_BGR2GRAY);
-    cv::GaussianBlur(gray, gray, cv::Size(3, 3), 0.8);
+    cv::GaussianBlur(gray, gray, cv::Size(5, 5), 1.0);
 
-    const int minR = std::max(2, static_cast<int>(std::floor(0.65 * std::max(coarse.radius_px, 4.0))));
-    const int maxR = std::max(minR + 2, static_cast<int>(std::ceil(1.40 * std::max(coarse.radius_px, 4.0))));
+    const int minR = std::max(3, static_cast<int>(std::floor(0.80 * r0)));
+    const int maxR = std::max(minR + 2, static_cast<int>(std::ceil(1.20 * r0)));
 
     std::vector<cv::Vec3f> circles;
-    cv::HoughCircles(gray, circles, cv::HOUGH_GRADIENT, 1.0, std::max(8.0, coarse.radius_px), 60.0, 10.0, minR, maxR);
+    cv::HoughCircles(gray, circles, cv::HOUGH_GRADIENT,
+        1.0,
+        std::max(8.0, 0.8 * r0),
+        80.0,
+        12.0,
+        minR,
+        maxR);
 
     if (circles.empty()) {
         out.debug += " | " + tag + ": Hough none; using coarse";
         return out;
     }
 
-    double bestD2 = 1e18;
+    double bestScore = -1e18;
     cv::Vec3f best = circles.front();
+
+    const cv::Point2d coarseLocal(coarse.center.x - x1, coarse.center.y - y1);
+
     for (const auto& c : circles) {
-        const double dx = c[0] - (coarse.center.x - x1);
-        const double dy = c[1] - (coarse.center.y - y1);
+        const double dx = c[0] - coarseLocal.x;
+        const double dy = c[1] - coarseLocal.y;
         const double d2 = dx * dx + dy * dy;
-        if (d2 < bestD2) {
-            bestD2 = d2;
+        const double rErr = std::abs(c[2] - r0) / std::max(r0, 1.0);
+
+        const double score = -d2 - 40.0 * rErr;
+        if (score > bestScore) {
+            bestScore = score;
             best = c;
         }
     }
 
+    const cv::Point2d refined = offsetPoint(cv::Point2d(best[0], best[1]), x1, y1);
+    const double refinedR = best[2];
+
+    const double movePx = cv::norm(refined - coarse.center);
+    const double radiusFracErr = std::abs(refinedR - coarse.radius_px) / std::max(coarse.radius_px, 1.0);
+
+    // Gate refinement very tightly
+    const double maxMovePx = 0.5;
+    const double maxRadiusFracErr = 0.10;
+
+    if (movePx > maxMovePx || radiusFracErr > maxRadiusFracErr) {
+        std::ostringstream oss;
+        oss << out.debug
+            << " | " << tag
+            << ": rejected Hough refine (move=" << movePx
+            << " px, rErr=" << radiusFracErr
+            << "), using coarse";
+        out.debug = oss.str();
+        return out;
+    }
+
     out.valid = true;
-    out.center = offsetPoint(cv::Point2d(best[0], best[1]), x1, y1);
-    out.radius_px = best[2];
+    out.center = refined;
+    out.radius_px = refinedR;
 
     std::ostringstream oss;
-    oss << out.debug << " | " << tag << ": Hough refined center=("
-        << out.center.x << ", " << out.center.y << ") r=" << out.radius_px;
+    oss << out.debug
+        << " | " << tag
+        << ": accepted Hough refine center=("
+        << out.center.x << ", " << out.center.y
+        << ") r=" << out.radius_px
+        << " move=" << movePx
+        << " rErr=" << radiusFracErr;
     out.debug = oss.str();
+
     return out;
 }
 
@@ -422,6 +570,15 @@ StereoOutput processFourViews(const cv::Mat& p1L,
     auto c1R = detectTennisBallYCbCr(p1R, "pair1_right");
     auto c2L = detectTennisBallYCbCr(p2L, "pair2_left");
     auto c2R = detectTennisBallYCbCr(p2R, "pair2_right");
+
+    const bool useHoughRefine = false;   // set true/false for A/B testing
+
+    if (useHoughRefine) {
+        c1L = refineWithHoughCircles(p1L, c1L, "pair1_left");
+        c1R = refineWithHoughCircles(p1R, c1R, "pair1_right");
+        c2L = refineWithHoughCircles(p2L, c2L, "pair2_left");
+        c2R = refineWithHoughCircles(p2R, c2R, "pair2_right");
+    }
 
     appendLine(dbg, c1L.debug);
     appendLine(dbg, c1R.debug);
@@ -469,24 +626,35 @@ StereoOutput processFourViews(const cv::Mat& p1L,
 
     const cv::Matx33d K = makeK(cfg.fx_px, cfg.fy_px, cfg.cx, cfg.cy);
 
-    // Actual Blender camera centers
-    const cv::Vec3d C1(-1.5, -15.0, 12.0);
-    const cv::Vec3d C2(1.5, -15.0, 12.0);
-    const cv::Vec3d C3(-1.5, -3.0, 12.0);
-    const cv::Vec3d C4(1.5, -3.0, 12.0);
+    cv::Vec3d C1(cfg.pair1_camBaseX - 0.5 * cfg.pair1_baseline_m,
+        cfg.pair1_camBaseY,
+        cfg.pair1_camBaseZ);
 
-    // Actual normalized Blender camera-to-world rotations
-    const cv::Matx33d R12_cw_bl(
-        1.0, 0.0, 0.0,
-        0.0, 0.8660254037844386, -0.5,
-        0.0, 0.5, 0.8660254037844386
-    );
+    cv::Vec3d C2(cfg.pair1_camBaseX + 0.5 * cfg.pair1_baseline_m,
+        cfg.pair1_camBaseY,
+        cfg.pair1_camBaseZ);
 
-    const cv::Matx33d R34_cw_bl(
-        1.0, 0.0, 0.0,
-        0.0, 0.7880107536067220, -0.6156614753256583,
-        0.0, 0.6156614753256583, 0.7880107536067220
-    );
+    cv::Vec3d C3(cfg.pair2_camBaseX - 0.5 * cfg.pair2_baseline_m,
+        cfg.pair2_camBaseY,
+        cfg.pair2_camBaseZ);
+
+    cv::Vec3d C4(cfg.pair2_camBaseX + 0.5 * cfg.pair2_baseline_m,
+        cfg.pair2_camBaseY,
+        cfg.pair2_camBaseZ);
+
+    const cv::Matx33d R12_cw_bl =
+        rotZdeg(cfg.pair1_camRollDeg) *
+        rotYdeg(cfg.pair1_camYawDeg) *
+        rotXdeg(-cfg.pair1_camPitchDeg);
+
+    const cv::Matx33d R34_cw_bl =
+        rotZdeg(cfg.pair2_camRollDeg) *
+        rotYdeg(cfg.pair2_camYawDeg) *
+        rotXdeg(-cfg.pair2_camPitchDeg);
+
+    std::cout << "USING NEGATED PITCH MODEL\n";
+    std::cout << "R12=\n" << cv::Mat(R12_cw_bl) << "\n";
+    std::cout << "R34=\n" << cv::Mat(R34_cw_bl) << "\n";
 
     cv::Matx34d Pleft, Pright;
     cv::Vec3d CamL, CamR;
@@ -503,6 +671,20 @@ StereoOutput processFourViews(const cv::Mat& p1L,
         CamL = C3;
         CamR = C4;
     }
+
+    if (pairIdx == 1) {
+        std::cout << "pair1 angles: pitch=" << cfg.pair1_camPitchDeg
+            << " yaw=" << cfg.pair1_camYawDeg
+            << " roll=" << cfg.pair1_camRollDeg << "\n";
+    }
+    else {
+        std::cout << "pair2 angles: pitch=" << cfg.pair2_camPitchDeg
+            << " yaw=" << cfg.pair2_camYawDeg
+            << " roll=" << cfg.pair2_camRollDeg << "\n";
+    }
+
+    std::cout << "Pleft=\n" << cv::Mat(Pleft) << "\n";
+    std::cout << "Pright=\n" << cv::Mat(Pright) << "\n";
 
     cv::Vec3d Xw = triangulateWorldPoint(L.center, R.center, Pleft, Pright);
     Xw = sanitizeWorld(Xw);
