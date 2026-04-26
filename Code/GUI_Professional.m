@@ -148,7 +148,7 @@ ui = uifigure('Name','Ball Tracking GUI (MATLAB UI + Blender only)', ...
 ui.CloseRequestFcn = @(~,~) onClose();
 
 main = uigridlayout(ui,[3 3]);
-main.ColumnWidth = {560,'1x','1x'};
+main.ColumnWidth = {500,'1x','1x'};
 main.RowHeight   = {550, 250, '1x'};
 main.Padding = [10 10 10 10];
 main.RowSpacing = 10;
@@ -158,8 +158,8 @@ pCtrl = uipanel(main,'Title','Controls');
 pCtrl.Layout.Row = 1;
 pCtrl.Layout.Column = 1;
 
-g = uigridlayout(pCtrl,[20 3]);
-g.RowHeight = {24,24,24,24,24,30,30,30,30,30,30,30,30,30,30,24,24,24,24,20};
+g = uigridlayout(pCtrl,[14 3]);
+g.RowHeight = {24,24,24,24,24,30,30,30,30,30,30,24,24,24};
 g.Padding = [6 6 6 6];
 g.RowSpacing = 2;
 g.ColumnSpacing = 6;
@@ -205,39 +205,39 @@ btnCOR.Layout.Row = 10; btnCOR.Layout.Column = [1 3];
 btnReplay = uibutton(g,'Text','Instant Replay','ButtonPushedFcn',@(~,~) onInstantReplay());
 btnReplay.Layout.Row = 11; btnReplay.Layout.Column = [1 3];
 
-btnSweep = uibutton(g,'Text','Run Sweep','ButtonPushedFcn',@(~,~) onRunSweep());
-btnSweep.Layout.Row = 12; btnSweep.Layout.Column = [1 3];
-
-btnValidate = uibutton(g,'Text','Run Validation','ButtonPushedFcn',@(~,~) onRunValidation());
-btnValidate.Layout.Row = 13; btnValidate.Layout.Column = [1 3];
-
-btnWeakValidate = uibutton(g,'Text','Run Weak-Zone Validation', ...
-    'ButtonPushedFcn', @(~,~) onRunWeakValidation());
-btnWeakValidate.Layout.Row = 14; 
-btnWeakValidate.Layout.Column = [1 3];
-
-btnFitCorrection = uibutton(g,'Text','Fit XYZ Correction', ...
-    'ButtonPushedFcn', @(~,~) onFitCorrection());
-btnFitCorrection.Layout.Row = 15;
-btnFitCorrection.Layout.Column = [1 3];
-
-btnCamAccuracy = uibutton(g, ...
-    'Text','Run Camera Accuracy', ...
-    'ButtonPushedFcn', @(~,~) onRunCameraPositionAccuracy());
-btnCamAccuracy.Layout.Row = 16;
-btnCamAccuracy.Layout.Column = [1 3];
+% btnSweep = uibutton(g,'Text','Run Sweep','ButtonPushedFcn',@(~,~) onRunSweep());
+% btnSweep.Layout.Row = 12; btnSweep.Layout.Column = [1 3];
+% 
+% btnValidate = uibutton(g,'Text','Run Validation','ButtonPushedFcn',@(~,~) onRunValidation());
+% btnValidate.Layout.Row = 13; btnValidate.Layout.Column = [1 3];
+% 
+% btnWeakValidate = uibutton(g,'Text','Run Weak-Zone Validation', ...
+%     'ButtonPushedFcn', @(~,~) onRunWeakValidation());
+% btnWeakValidate.Layout.Row = 14; 
+% btnWeakValidate.Layout.Column = [1 3];
+% 
+% btnFitCorrection = uibutton(g,'Text','Fit XYZ Correction', ...
+%     'ButtonPushedFcn', @(~,~) onFitCorrection());
+% btnFitCorrection.Layout.Row = 15;
+% btnFitCorrection.Layout.Column = [1 3];
+% 
+% btnCamAccuracy = uibutton(g, ...
+%     'Text','Run Camera Accuracy', ...
+%     'ButtonPushedFcn', @(~,~) onRunCameraPositionAccuracy());
+% btnCamAccuracy.Layout.Row = 16;
+% btnCamAccuracy.Layout.Column = [1 3];
 
 shotSummary.Text = 'Shot: --';
-shotSummary.Layout.Row = 17;
+shotSummary.Layout.Row = 12;
 shotSummary.Layout.Column = [1 3];
 
 uilabel(g,'Text','LED state');
 lblLED = uilabel(g,'Text','--');
-lblLED.Layout.Row = 18;
+lblLED.Layout.Row = 13;
 lblLED.Layout.Column = [2 3];
 
 statusLabel = uilabel(g,'Text','Idle.');
-statusLabel.Layout.Row = 19;
+statusLabel.Layout.Row = 14;
 statusLabel.Layout.Column = [1 3];
 
 pL = uipanel(main,'Title','Chosen Left Image');
@@ -255,43 +255,51 @@ axis(axR,'image'); axis(axR,'off');
 pOut = uipanel(main,'Title','Output');
 pOut.Layout.Row = [2 3]; pOut.Layout.Column = 1;
 
-go = uigridlayout(pOut,[16 1]);
-go.RowHeight = {30,24,24,24,24,24,24,24,24,24,24,24,24,24,54,24,'1x'};
+go = uigridlayout(pOut,[8 1]);
+go.RowHeight = {34,30,30,30,30,100,70,'1x'};
 go.Padding = [8 8 8 8];
-go.RowSpacing = 1;
+go.RowSpacing = 6;
 
-lblPair   = uilabel(go,'Text','Chosen pair: --','FontWeight','bold');
-lblCourt  = uilabel(go,'Text','Court side: --');
-lblL      = uilabel(go,'Text','Left centroid: --');
-lblR      = uilabel(go,'Text','Right centroid: --');
-lblDisp   = uilabel(go,'Text','Disparity: --');
-lblX      = uilabel(go,'Text','X: --');
-lblY      = uilabel(go,'Text','Y: --');
-lblZ      = uilabel(go,'Text','Z: --');
+lblX = uilabel(go,'Text','X: --');
+lblY = uilabel(go,'Text','Y: --');
+lblZ = uilabel(go,'Text','Z: --');
 lblErr = uilabel(go,'Text','Error: --');
-lblMsg1   = uilabel(go,'Text','Backend: --');
-lblMsg2   = uilabel(go,'Text','Blender: --');
-lblShotType = uilabel(go,'Text','Shot type: --');
 lblDecision = uilabel(go,'Text','Decision: --');
-lblCOR      = uilabel(go,'Text','Restitution: --');
 
 ledPanel = uipanel(go,'Title','LED Visualization');
-ledPanel.Layout.Row = 14;
+ledPanel.Layout.Row = 6;
+
 ledGrid = uigridlayout(ledPanel,[1 4]);
-ledGrid.ColumnWidth = {45,120,45,120};
+ledGrid.ColumnWidth = {80,140,80,140};
+ledGrid.RowHeight = {70};
+ledGrid.Padding = [12 10 12 10];
+ledGrid.ColumnSpacing = 14;
 
 ledGreen = uilamp(ledGrid,'Color',[0.2 0.2 0.2]);
-ledGreen.Layout.Row = 1; ledGreen.Layout.Column = 1;
-uilabel(ledGrid,'Text','IN');
+ledGreen.Layout.Row = 1;
+ledGreen.Layout.Column = 1;
+
+uilabel(ledGrid,'Text','IN','FontSize',14,'FontWeight','bold');
 
 ledRed = uilamp(ledGrid,'Color',[0.2 0.2 0.2]);
-ledRed.Layout.Row = 1; ledRed.Layout.Column = 3;
-uilabel(ledGrid,'Text','OUT');
+ledRed.Layout.Row = 1;
+ledRed.Layout.Column = 3;
 
-lblBounce = uilabel(go,'Text','Bounce: --');
+uilabel(ledGrid,'Text','OUT','FontSize',14,'FontWeight','bold');
 
 msg = uitextarea(go,'Editable','off');
-msg.Layout.Row = 16;
+msg.Layout.Row = 7;
+
+lblPair    = uilabel(go,'Text','Chosen pair: --','Visible','off');
+lblCourt   = uilabel(go,'Text','Court side: --','Visible','off');
+lblL       = uilabel(go,'Text','Left centroid: --','Visible','off');
+lblR       = uilabel(go,'Text','Right centroid: --','Visible','off');
+lblDisp    = uilabel(go,'Text','Disparity: --','Visible','off');
+lblMsg1    = uilabel(go,'Text','Backend: --','Visible','off');
+lblMsg2    = uilabel(go,'Text','Blender: --','Visible','off');
+lblShotType = uilabel(go,'Text','Shot type: --','Visible','off');
+lblCOR     = uilabel(go,'Text','Restitution: --','Visible','off');
+lblBounce  = uilabel(go,'Text','Bounce: --','Visible','off');
 
 p3 = uipanel(main,'Title','3D Trajectory');
 p3.Layout.Row = 3;
@@ -1096,29 +1104,29 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
         geom.courtYMax = 11.885;
         geom.serviceBoxYMin = 0.00;
         geom.serviceBoxYMax = 6.40;
-    
+
         % Tennis ball / court line dimensions in meters.
         % Standard tennis ball diameter is about 6.54 cm to 6.86 cm,
         % so radius is approximately 0.0335 m.
         geom.ballRadius = 0.0335;
-    
+
         % Typical court line width is about 5 cm.
-        % If the court boundary is drawn/measured at the center of the painted line,
+        % If the boundary is treated as the center of the painted line,
         % add half the line width to the ball radius.
         geom.lineWidth = 0.05;
-    
+
         % Line-touch rule:
         % A ball is IN if any part of the ball touches the line.
         geom.lineTouchTol = geom.ballRadius + geom.lineWidth/2;
-    
+
         % volley target area on far side
         geom.farCourtYMin = 0.00;
         geom.farCourtYMax = geom.courtYMax;
-    
+
         % net model
         geom.netY = 0.00;
         geom.netHeight = 0.914;   % simple flat center-height model
-    
+
         geom.polyX = [];
         geom.polyY = [];
         geom.groundZ = WORLD.groundZ;
@@ -1599,7 +1607,7 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
     end
 
     function setButtonState(stateStr)
-        objs = {btnRun, btnClear, btnServe, btnVolley, btnCOR, btnReplay, btnSweep, btnValidate, btnWeakValidate, btnFitCorrection, btnCamAccuracy};
+        objs = {btnRun, btnClear, btnServe, btnVolley, btnCOR, btnReplay};
         for ii = 1:numel(objs)
             if ~isempty(objs{ii}) && isvalid(objs{ii})
                 objs{ii}.Enable = stateStr;
@@ -2366,15 +2374,17 @@ end
 
     function decision = classifyShotFromBounce(shotType, bounceXYZ, courtGeom)
         decision = "UNKNOWN";
-    
+
         if isempty(bounceXYZ) || ~all(isfinite(bounceXYZ(1:2)))
             return;
         end
-    
+
         x = bounceXYZ(1);
         y = bounceXYZ(2);
-    
+
         % Use ball/line tolerance so that line contact counts as IN.
+        % The measured point is the ball center, but tennis rules are based
+        % on whether the outside edge of the ball touches the line.
         if isfield(courtGeom, 'lineTouchTol')
             lineTol = courtGeom.lineTouchTol;
         elseif isfield(courtGeom, 'ballRadius')
@@ -2382,74 +2392,25 @@ end
         else
             lineTol = 0.0335;
         end
-    
+
         % Use the same court geometry that is being plotted.
-        % This makes the visual court boundary and IN/OUT logic match.
+        % This makes the green court boundary and IN/OUT logic match.
         xMin = min(courtGeom.polyX);
         xMax = max(courtGeom.polyX);
         yMin = min(courtGeom.polyY);
         yMax = max(courtGeom.polyY);
-    
-        % Expand the court boundary outward by the ball/line tolerance.
+
+        % Expand the boundary outward by the real ball/line tolerance.
         % If the ball center is just outside the line, but the ball edge
         % still touches the line, it counts as IN.
         inX = (x >= xMin - lineTol) && (x <= xMax + lineTol);
         inY = (y >= yMin - lineTol) && (y <= yMax + lineTol);
-    
+
         if inX && inY
             decision = "IN";
         else
             decision = "OUT";
         end
-    end
-
-    function dMin = distancePointToPolygonEdges(x, y, polyX, polyY)
-        dMin = inf;
-    
-        n = numel(polyX);
-    
-        for k = 1:n
-            k2 = k + 1;
-    
-            if k2 > n
-                k2 = 1;
-            end
-    
-            x1 = polyX(k);
-            y1 = polyY(k);
-            x2 = polyX(k2);
-            y2 = polyY(k2);
-    
-            d = distancePointToSegment(x, y, x1, y1, x2, y2);
-    
-            if d < dMin
-                dMin = d;
-            end
-        end
-    end
-
-    function d = distancePointToSegment(px, py, x1, y1, x2, y2)
-        vx = x2 - x1;
-        vy = y2 - y1;
-    
-        wx = px - x1;
-        wy = py - y1;
-    
-        c1 = wx*vx + wy*vy;
-        c2 = vx*vx + vy*vy;
-    
-        if c2 <= eps
-            d = hypot(px - x1, py - y1);
-            return;
-        end
-    
-        t = c1 / c2;
-        t = max(0, min(1, t));
-    
-        projX = x1 + t*vx;
-        projY = y1 + t*vy;
-    
-        d = hypot(px - projX, py - projY);
     end
 
     function preset = getShotPreset(name, groundZ)
@@ -2470,12 +2431,12 @@ end
                 preset.bounceT = 0.79;
     
             % ---------------- SERVES: 2 OUT ----------------
-            case 'serve_out_1'   % too wide
+            case 'serve_out_1'   % too wide beyond full court sideline
                 preset.x0 = 0.0;  preset.y0 = -11.0; preset.z0 = 2.6;
                 preset.vx = 7.2;  preset.vy = 18.0;  preset.vz = 1.8;
                 preset.bounceT = 0.80;
     
-            case 'serve_out_2'   % too deep
+            case 'serve_out_2'   % too deep beyond full court baseline
                 preset.x0 = 0.0;  preset.y0 = -11.0; preset.z0 = 2.6;
                 preset.vx = 0.1;  preset.vy = 27.5;  preset.vz = 1.8;
                 preset.bounceT = 0.86;
@@ -2663,7 +2624,7 @@ end
         [px, py] = deal([courtGeom.netY courtGeom.netY], ...
                         [-max(courtGeom.polyX) -min(courtGeom.polyX)]);
         plot(ax, px, py, 'r-', 'LineWidth', 1.2);
-
+    
         % Choose which point to plot
         if strcmpi(shot.decision, "NET") && all(isfinite(shot.netXYZ))
             plotXYZ = shot.netXYZ;
@@ -2690,19 +2651,18 @@ end
             end
     
             % Draw the real tennis ball footprint to scale.
-            % This circle is in meters, unlike MarkerSize which is just screen size.
+            % This circle is in meters, unlike MarkerSize which is screen size.
             if isfield(courtGeom, 'ballRadius')
                 ballR = courtGeom.ballRadius;
             else
                 ballR = 0.0335;   % meters
             end
-            
+
             theta = linspace(0, 2*pi, 100);
-            
             ballCircleX = bx + ballR*cos(theta);
             ballCircleY = by + ballR*sin(theta);
-            
-            % Use decision color for the real ball footprint
+
+            % Use decision color for the real ball footprint.
             switch upper(string(shot.decision))
                 case "IN"
                     ballColor = 'g';
@@ -2713,19 +2673,19 @@ end
                 otherwise
                     ballColor = 'k';
             end
-            
-            % Actual ball edge, to scale
+
+            % Actual ball edge, to scale.
             plot(ax, ballCircleX, ballCircleY, '-', ...
                 'Color', ballColor, 'LineWidth', 1.5);
-            
-            % Center point, not meant to represent ball size
+
+            % Center point, not meant to represent ball size.
             plot(ax, bx, by, '.', ...
                 'Color', ballColor, 'MarkerSize', 12);
-            
-            % Optional small visual marker so you can still see the shot location.
+
+            % Small visual marker so the shot is still easy to see.
             % This is NOT to scale.
             plot(ax, bx, by, mk, 'MarkerSize', 6, 'LineWidth', 1.0);
-            
+
             text(bx + 0.2, by, sprintf('%s', shot.decision), ...
                 'FontSize', 10, 'FontWeight', 'bold');
         end
@@ -2738,17 +2698,17 @@ end
         ylim(ax, [-max(courtGeom.polyX)-1, -min(courtGeom.polyX)+1]);
         hold(ax, 'off');
 
-        % image folder inside the current code folder
+        % Make images folder inside the current code folder
         imageDir = fullfile(pwd, 'images');
         
         if ~exist(imageDir, 'dir')
             mkdir(imageDir);
         end
         
-        % safe for a filename
+        % Clean shot name so it is safe for a filename
         safeShotName = regexprep(char(shotName), '[^\w\-]', '_');
         
-        % save as a PNG
+        % Save the figure as a PNG
         saveas(gcf, fullfile(imageDir, sprintf('%s_shot_no_%d.png', safeShotName, shotNo)));
     end
 
