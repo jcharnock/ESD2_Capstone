@@ -1,4 +1,4 @@
-function Project_GUI_Development_v1
+function GUI_Professional
 %% Project GUI + Blender 
 % MATLAB handles:
 %   - GUI
@@ -552,6 +552,11 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
             [shot.decision, shot.bounceXYZ, shot.netXYZ, shot.contactT, shot.netT] = ...
                 classifyShotOutcome('serve', shot.t, shot.xyzTrue, COURT);
     
+            shot.name = char(thisPreset);
+            shot.shotNo = 1;
+            
+            plotSingleShotCourt(shot, char(thisPreset), COURT, 1);
+
             shot.restitution = NaN;
     
             results{i,1} = char(thisPreset);
@@ -560,7 +565,10 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
             results{i,4} = shot.bounceXYZ(3);
             results{i,5} = char(shot.decision);
             results{i,6} = nnz(shot.valid);
-    
+            
+            shot.name = char(thisPreset);
+            shot.shotNo = i;
+
             plotSingleShotCourt(shot, char(thisPreset), COURT, i);
     
             % Keep the most recently run shot for display/replay
@@ -640,6 +648,9 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
             results{i,5} = char(shot.decision);
             results{i,6} = nnz(shot.valid);
     
+            shot.name = char(volleyPresets(i));
+            shot.shotNo = i;
+
             plotSingleShotCourt(shot, char(volleyPresets(i)), COURT, i);
 
             if i == numel(volleyPresets)
@@ -765,6 +776,12 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
                 sprintf('Valid bounces = %d', numel(outCOR.corValues))
             ]);
     
+            if ~isfield(lastShot, 'name') || isempty(lastShot.name)
+                lastShot.name = "cor_result";
+            end
+            
+            lastShot.shotNo = 1;
+
              try
                 uploadLastShotToWebsite(lastShot, "cor", WEB);
             catch ME
@@ -2426,9 +2443,14 @@ end
                 preset.bounceT = 0.80;
     
             case 'serve_in_2'
-                preset.x0 = 0.0;  preset.y0 = -11.0; preset.z0 = 2.6;
-                preset.vx = -0.8; preset.vy = 18.2;  preset.vz = 1.9;
-                preset.bounceT = 0.79;
+            % Boundary serve: lands almost exactly on the right sideline.
+            % With bounceT = 0.79 s and x0 = 0, vx = 6.91 gives
+            % Xbounce ~= 5.459 m, just inside the X = 5.485 m boundary.
+            % This avoids being classified OUT by center-point logic while
+            % still visually appearing to touch the line.
+            preset.x0 = 0.0;  preset.y0 = -11.0; preset.z0 = 2.6;
+            preset.vx = 6.89; preset.vy = 18.2;  preset.vz = 1.9;
+            preset.bounceT = 0.79;
     
             % ---------------- SERVES: 2 OUT ----------------
             case 'serve_out_1'   % too wide beyond full court sideline

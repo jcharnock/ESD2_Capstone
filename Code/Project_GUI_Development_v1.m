@@ -544,6 +544,11 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
             [shot.decision, shot.bounceXYZ, shot.netXYZ, shot.contactT, shot.netT] = ...
                 classifyShotOutcome('serve', shot.t, shot.xyzTrue, COURT);
     
+            shot.name = char(thisPreset);
+            shot.shotNo = 1;
+            
+            plotSingleShotCourt(shot, char(thisPreset), COURT, 1);
+
             shot.restitution = NaN;
     
             results{i,1} = char(thisPreset);
@@ -553,6 +558,9 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
             results{i,5} = char(shot.decision);
             results{i,6} = nnz(shot.valid);
     
+            shot.name = char(thisPreset);
+            shot.shotNo = i;
+
             plotSingleShotCourt(shot, char(thisPreset), COURT, i);
     
             % Keep the most recently run shot for display/replay
@@ -632,6 +640,9 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
             results{i,5} = char(shot.decision);
             results{i,6} = nnz(shot.valid);
     
+            shot.name = char(volleyPresets(i));
+            shot.shotNo = i;
+
             plotSingleShotCourt(shot, char(volleyPresets(i)), COURT, i);
 
             if i == numel(volleyPresets)
@@ -757,6 +768,12 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
                 sprintf('Valid bounces = %d', numel(outCOR.corValues))
             ]);
     
+            if ~isfield(lastShot, 'name') || isempty(lastShot.name)
+                lastShot.name = "cor_result";
+            end
+            
+            lastShot.shotNo = 1;
+
              try
                 uploadLastShotToWebsite(lastShot, "cor", WEB);
             catch ME

@@ -47,7 +47,8 @@ function payload = buildWebPayload(shot, shotCategory, WEB)
 
     % Event type supplied by caller: serve / volley / cor / etc.
     payload.event_type = char(string(shotCategory));
-
+    payload.shot_no = getScalarNaN(shot, 'shotNo');
+    
     % UTC upload timestamp in ISO-like format for backend storage.
     payload.uploaded_utc = char(datetime('now', ...
         'TimeZone', 'UTC', ...
