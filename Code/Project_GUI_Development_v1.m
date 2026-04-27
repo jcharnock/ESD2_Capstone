@@ -543,11 +543,6 @@ eZ.ValueChangedFcn  = @(src,~) setIfValid(sZ,'Value',src.Value);
     
             [shot.decision, shot.bounceXYZ, shot.netXYZ, shot.contactT, shot.netT] = ...
                 classifyShotOutcome('serve', shot.t, shot.xyzTrue, COURT);
-    
-            shot.name = char(thisPreset);
-            shot.shotNo = 1;
-            
-            plotSingleShotCourt(shot, char(thisPreset), COURT, 1);
 
             shot.restitution = NaN;
     

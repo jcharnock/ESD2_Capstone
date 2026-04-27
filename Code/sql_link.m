@@ -1,15 +1,11 @@
 function sql_link(sqlStruct, image_source)
 %SQL_LINK connects to the SQL database and sends shot data.
-%
-% This function receives a SQL-friendly MATLAB struct and an image path.
-% It writes the shot data to MySQL.
 
 arguments (Input)
     sqlStruct
     image_source
 end
 
-    % Set up entry number counter and database credentials.
     persistent entry_number;
 
     if isempty(entry_number)
@@ -19,14 +15,10 @@ end
     username = "root";
     password = "tennistracker123";
 
-    % Store the image path instead of the full image matrix.
-    % This is safer for sqlwrite than trying to upload a 3D uint8 image.
-    % sqlStruct.court_image_path = string(image_source);
-
-    % Convert struct to SQL table.
+    % Do NOT read the image into SQL.
+    % sqlStruct.court_image already contains the relative image path.
     shotTable = struct2table(sqlStruct);
 
-    % Connect to SQL.
     try
         conn = mysql(username, password, ...
             'Server', "localhost", ...
@@ -37,10 +29,8 @@ end
         return;
     end
 
-    % Write to database.
     entry_number = entry_number + 1;
-
-    tableName = sprintf('serve_no_%d', entry_number);
+    tableName = "serve_no_" + entry_number;
 
     try
         sqlwrite(conn, tableName, shotTable);
