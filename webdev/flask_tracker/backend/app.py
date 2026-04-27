@@ -12,10 +12,11 @@ app = Flask(__name__)
 
 # MySQL config
 # DO NOT CHANGE USER AND PASSWORD
+# IP configured for local pc
 DB_CONFIG = {
-    "host": "localhost",
+    "host": "10.8.86.8",
     "port": 3306,
-    "user": "root",
+    "user": "flaskuser",
     "password": "tennistracker123",
     "database": "volleys"
 }
@@ -61,13 +62,11 @@ def get_new_entries():
             cursor.execute(f"SELECT * FROM {table}")
             rows = cursor.fetchall()
 
-            entry = {
-                "table_name": table,
-                "serve_number": num,
-                "data": rows
-            }
-
-            results.append(entry)
+            # divvy entries into rows fro front end
+            for entry in rows:
+                entry["serve_number"] = num
+                entry["table_name"] = table
+                results.append(entry)
 
             # Update tracker
             last_seen_table = num

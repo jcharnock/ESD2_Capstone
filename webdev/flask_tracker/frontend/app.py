@@ -19,19 +19,19 @@ class TennisTracker(QWidget):
         # Build UI 
         self.setup_ui()
 
-        # pull entries & load site
-        #self.refresh_data()
-        #DEBUG: load fake SQL list
-        self.debug_refresh_data()
-
         # keep list of seen entries from SQL
         self.seen_entries = set()
+
+        # pull entries & load site
+        self.refresh_data()
+        #DEBUG: load fake SQL list
+        #self.debug_refresh_data()
 
         # 10 second refresh
         self.timer = QTimer()
         # DEBUG Refresh Data
-        self.timer.timeout.connect(self.debug_refresh_data)
-        #self.timer.timeout.connect(self.refresh_data)
+        #self.timer.timeout.connect(self.debug_refresh_data)
+        self.timer.timeout.connect(self.refresh_data)
         self.timer.start(5000)
         # check for clicked entry
         self.entries.itemClicked.connect(self.handle_item_click)
@@ -128,25 +128,28 @@ class TennisTracker(QWidget):
         try:
             response = requests.get("http://127.0.0.1:5000/get_new_entries", timeout=5)
             data = response.json()
+            print(data)
 
             if not data:
                 return
 
             for row in data:
-                text = (
-                    f"Entry #{row['entry_number']}              Timestamp: {row['timestamp']}"
-                )
-                unique_id = f"{row['entry_number']}_{row['timestamp']}"
-
+                entry_no = int(float(row.get("entry_number", "N/A")))
+                timestamp = row.get("timestamp", "N/A")
+                unique_id = entry_no
                 # if unique_id doesn't match seen entries add to list (fixes duplicates)
                 if unique_id in self.seen_entries:
-                     continue
+                    continue
 
+                text = (
+                    f"Entry #{entry_no}             Timestamp: {timestamp}"
+                )            
                 item = QListWidgetItem(text)
                 # Storen row
                 item.setData(Qt.UserRole, row)
                 # insert item at top of list
                 self.entries.insertItem(0, item)
+                self.seen_entries.add(unique_id)
 
         except Exception as e:
             print("Refresh Error:", e)
@@ -156,8 +159,8 @@ class TennisTracker(QWidget):
         # Update left info panel
         self.info.setText(
             f"Timestamp: {row['timestamp']}\n"
-            f"X Coordinate: {row['x_coordinate']}\n"
-            f"Y Coordinate: {row['y_coordinate']}"
+            f"X Coordinate: {float(row['x_coordinate']):.2f}\n"
+            f"Y Coordinate: {float(row['y_coordinate']):.2f}"
          )
         # Update Ruling
         self.ruling.setText(
