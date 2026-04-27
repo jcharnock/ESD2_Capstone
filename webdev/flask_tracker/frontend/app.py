@@ -170,14 +170,15 @@ class TennisTracker(QWidget):
         web_image = QLabel()
         web_image.convert_court_image(row['court_image'])
         if web_image:
-            if not web_image.isNull():
+            pixmap = QPixmap(web_image)
+            if not pixmap.isNull():
                 self.image.setPixmap(
-                    web_image.scaled( 
+                    pixmap.scaled( 
                         480, # length
                         240, # width
                         Qt.KeepAspectRatio,
                          Qt.SmoothTransformation
-                     )
+                    )
                  )
                 return
         # if image is missing set instead
