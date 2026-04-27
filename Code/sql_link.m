@@ -21,7 +21,7 @@ end
 
     % Store the image path instead of the full image matrix.
     % This is safer for sqlwrite than trying to upload a 3D uint8 image.
-    sqlStruct.court_image_path = string(image_source);
+    % sqlStruct.court_image_path = string(image_source);
 
     % Convert struct to SQL table.
     shotTable = struct2table(sqlStruct);
