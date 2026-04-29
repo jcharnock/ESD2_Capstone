@@ -3,14 +3,14 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from .utils import get_last_seen, set_last_seen
 
-# Read-only API for entries
+# read only API for entries
 @api_view(['GET'])
 def get_new_serves(request):
 
     new_rows = []
 
     with connection.cursor() as cursor:
-
+        # look for tables
         cursor.execute("SHOW TABLES LIKE 'serve_no_%'")
         tables = [t[0] for t in cursor.fetchall()]
 
